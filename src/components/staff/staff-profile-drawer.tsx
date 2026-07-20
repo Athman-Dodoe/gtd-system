@@ -428,10 +428,10 @@ export function StaffProfileDrawer({ staffId, onClose, onStaffRemoved, onStaffUp
       >
         <div className="flex flex-col h-full pb-6">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800/60 shrink-0">
-            <h2 className="text-sm font-semibold text-white truncate">
+            <h2 className="text-sm font-semibold text-white truncate flex-1 mr-4">
               {loading ? 'Loading...' : isEditing ? 'Edit Profile' : profile?.fullName || 'Counsel Profile'}
             </h2>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={onClose}
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
