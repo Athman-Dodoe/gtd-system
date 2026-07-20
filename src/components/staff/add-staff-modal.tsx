@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { CreateStaffSchema } from '@/lib/schemas/staff'
 import { EXPERTISE_LABELS } from '@/lib/constants'
 import { notifyDashboardRefresh } from '@/lib/notify-dashboard'
+import { Portal } from '@/components/ui/portal'
 
 interface AddStaffModalProps {
   open: boolean
@@ -136,8 +137,9 @@ export function AddStaffModal({ open, onClose, onSuccess }: AddStaffModalProps) 
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div
+    <Portal>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div
         className="glass-panel w-full max-w-lg max-h-[85vh] overflow-y-auto animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
@@ -312,6 +314,7 @@ export function AddStaffModal({ open, onClose, onSuccess }: AddStaffModalProps) 
         </form>
       </div>
     </div>
+    </Portal>
   )
 }
 

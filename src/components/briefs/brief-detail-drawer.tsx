@@ -8,6 +8,7 @@ import type { ExpertiseArea } from '@prisma/client'
 import { FileUpload, type PendingFile } from './file-upload'
 import { useDebounce } from '@/lib/hooks/use-debounce'
 import { notifyDashboardRefresh } from '@/lib/notify-dashboard'
+import { Portal } from '@/components/ui/portal'
 
 interface BriefAssignment {
   allocationId: string
@@ -541,7 +542,7 @@ export function BriefDetailDrawer({ briefId, onClose, onBriefUpdated }: BriefDet
   }, [briefId, onClose, onBriefUpdated, showToast])
 
   return (
-    <>
+    <Portal>
       <div
         className={`fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ${briefId ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
@@ -759,7 +760,7 @@ export function BriefDetailDrawer({ briefId, onClose, onBriefUpdated }: BriefDet
           </div>
         </div>
       )}
-    </>
+    </Portal>
   )
 }
 

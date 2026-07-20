@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Portal } from '@/components/ui/portal'
 
 interface SubmitWorkFormData {
   completionNotes: string
@@ -137,6 +138,7 @@ export function SubmitWorkModal({
   )
 
   return (
+    <Portal>
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -320,5 +322,6 @@ export function SubmitWorkModal({
         </form>
       </div>
     </div>
+    </Portal>
   )
 }

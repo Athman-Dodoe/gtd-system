@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { Portal } from '@/components/ui/portal'
 
 export type AllocationOutcome =
   | {
@@ -36,6 +37,7 @@ interface OutcomeModalProps {
 
 export function OutcomeModal({ outcome, onLogAnother }: OutcomeModalProps) {
   return (
+    <Portal>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="glass-panel w-full max-w-md p-6 animate-slide-up">
         {outcome.outcome === 'ALLOCATED' && (
@@ -49,6 +51,7 @@ export function OutcomeModal({ outcome, onLogAnother }: OutcomeModalProps) {
         )}
       </div>
     </div>
+    </Portal>
   )
 }
 

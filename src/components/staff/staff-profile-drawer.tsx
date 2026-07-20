@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { DAILY_CAPACITY_HOURS, EXPERTISE_LABELS } from '@/lib/constants'
 import { UpdateStaffSchema } from '@/lib/schemas/staff'
+import { Portal } from '@/components/ui/portal'
 
 interface ProfileExpertise {
   expertiseArea: string
@@ -415,7 +416,7 @@ export function StaffProfileDrawer({ staffId, onClose, onStaffRemoved, onStaffUp
   }, [editForm, staffId, fetchData, onStaffUpdated])
 
   return (
-    <>
+    <Portal>
       <div
         className={`fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ${staffId ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
@@ -855,7 +856,7 @@ export function StaffProfileDrawer({ staffId, onClose, onStaffRemoved, onStaffUp
           </div>
         </div>
       )}
-    </>
+    </Portal>
   )
 }
 
