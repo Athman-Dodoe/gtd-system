@@ -1,0 +1,452 @@
+// =============================================================================
+// GTD Legal Brief Allocation System
+// Office of the Attorney General, Kenya — Government Transactions Department
+// =============================================================================
+// Prisma Schema Language v5
+// Database: PostgreSQL
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+/// Maps to the actual staff designations in the department.
+/// DEPUTY_CHIEF = Deputy Chief State Counsel (highest in allocation pool)
+/// PRINCIPAL    = Principal State Counsel
+/// SENIOR       = Senior State Counsel
+enum SeniorityLevel {
+  DEPUTY_CHIEF
+  PRINCIPAL
+  SENIOR
+}
+
+/// The six legal work areas handled by the Government Transactions Department.
+enum ExpertiseArea {
+  PUBLIC_PROCUREMENT_CONTRACTS /// Clearance & Termination
+  FINANCING_AGREEMENTS         /// Clearance & Legal Opinions
+  PPP_PROJECT_AGREEMENTS
+  MEMORANDA_OF_UNDERSTANDING
+  CABINET_MEMORANDA
+  GENERAL_LEGAL_ADVISORY
+}
+
+/// Clarifies the nature of work within an expertise area.
+enum BriefSubType {
+  CLEARANCE
+  TERMINATION
+  LEGAL_OPINION
+  STANDARD
+  ADVISORY
+}
+
+/// Controls seniority preference in the allocation engine.
+/// EMERGENCY briefs skip queue entirely and go straight to the most senior
+/// available counsel with capacity.
+enum UrgencyLevel {
+  ROUTINE
+  URGENT
+  EMERGENCY
+}
+
+/// Full brief lifecycle from receipt through formal closure by the DSG.
+enum BriefStatus {
+  RECEIVED    /// Logged — awaiting allocation engine run
+  QUEUED      /// No capacity found — DSG must manually assign
+  ALLOCATED   /// Assigned to counsel — work not yet started
+  IN_PROGRESS /// Counsel acknowledged and is actively working
+  COMPLETED   /// Work product submitted by counsel
+  CLOSED      /// Formally closed by DSG
+}
+
+/// Records exactly how the allocation engine made its decision.
+/// Critical for the audit trail — every allocation can be explained.
+enum AllocationMethod {
+  AUTO_EXPERTISE      /// Least-loaded counsel in the matching expertise area
+  AUTO_SENIORITY      /// Seniority-first for URGENT/EMERGENCY briefs
+  AUTO_REPEAT_MATTER  /// Routed to prior counsel who handled the same reference
+  MANUAL_DSG          /// DSG overrode the engine or assigned manually
+}
+
+/// Role-based access control. DSG has full admin. COUNSEL sees own work only.
+enum UserRole {
+  DSG     /// Deputy Solicitor General — full system access
+  COUNSEL /// Legal counsel — own assignments only
+}
+
+/// Append-only audit event vocabulary. Every state change produces one entry.
+enum AuditEventType {
+  BRIEF_RECEIVED
+  BRIEF_ALLOCATED
+  BRIEF_REALLOCATED
+  BRIEF_QUEUED
+  BRIEF_DEQUEUED
+  BRIEF_STATUS_CHANGED
+  BRIEF_CLOSED
+  STAFF_CREATED
+  STAFF_UPDATED
+  STAFF_DEACTIVATED
+  CAPACITY_OVERRIDE
+  REPEAT_MATTER_DETECTED  /// System found a prior match by reference number
+  REPEAT_MATTER_FALLBACK  /// Prior counsel was at capacity — DSG alerted
+  MANUAL_ASSIGNMENT_BY_DSG
+  PASSWORD_RESET_REQUESTED /// User requested a password reset email
+  PASSWORD_RESET_COMPLETED /// User successfully reset their password
+}
+
+/// In-app notification types. Used to render the correct message and icon.
+enum NotificationType {
+  BRIEF_ALLOCATED_TO_YOU     /// Counsel: new brief assigned to you
+  BRIEF_REALLOCATED_TO_YOU   /// Counsel: brief moved to you from another counsel
+  BRIEF_REALLOCATED_FROM_YOU /// Counsel: brief taken from you by DSG
+  QUEUE_ALERT                /// DSG: brief queued — no counsel capacity
+  REPEAT_MATTER_ALERT        /// DSG: repeat matter — prior counsel at capacity
+  BRIEF_COMPLETED            /// DSG: counsel has marked a brief as complete
+}
+
+// =============================================================================
+// NEXTAUTH MODELS
+// Required by @auth/prisma-adapter. Field names follow the adapter's contract.
+// =============================================================================
+
+model User {
+  id            String    @id @default(uuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  role          UserRole  @default(COUNSEL)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+  passwordHash  String    @map("password_hash")
+  mustChangePassword  Boolean   @default(true) @map("must_change_password")
+
+  // NextAuth adapter relations
+  accounts Account[]
+  sessions Session[]
+
+  // Domain relations
+  staff             Staff?
+  createdBriefs     Brief[]          @relation("BriefCreatedBy")
+  manualAllocations Allocation[]     @relation("AllocationCreatedBy")
+  uploadedFiles     BriefAttachment[]
+  notifications     Notification[]   @relation("NotificationRecipient")
+  auditActorLogs    AuditLog[]       @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refreshToken      String? @map("refresh_token") @db.Text
+  accessToken       String? @map("access_token") @db.Text
+  expiresAt         Int?    @map("expires_at")
+  tokenType         String? @map("token_type")
+  scope             String?
+  idToken           String? @map("id_token") @db.Text
+  sessionState      String? @map("session_state")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+// =============================================================================
+// STAFF REGISTRY
+// Separate from User — a counsel can exist in the system before login
+// credentials are issued. Linked to User via optional userId foreign key.
+// =============================================================================
+
+model Staff {
+  id             String         @id @default(uuid())
+  userId         String?        @unique @map("user_id")
+  employeeNumber String         @unique @map("employee_number")
+  fullName       String         @map("full_name")
+  designation    String
+  email          String         @unique
+  seniority      SeniorityLevel
+  isActive       Boolean        @default(true) @map("is_active")
+  dateJoined     DateTime       @map("date_joined") @db.Date
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  deletedAt      DateTime?      @map("deleted_at")
+
+  // Relations
+  user           User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  expertiseAreas StaffExpertise[]
+  allocations    Allocation[]
+  dailyWorkloads DailyWorkload[]
+  auditStaffLogs AuditLog[]       @relation("AuditStaff")
+  notifications  Notification[]   @relation("NotificationStaff")
+
+  @@map("staff")
+}
+
+/// Join table: a staff member can handle multiple expertise areas.
+/// isPrimary marks their main specialisation — used as a tiebreaker.
+model StaffExpertise {
+  id            String        @id @default(uuid())
+  staffId       String        @map("staff_id")
+  expertiseArea ExpertiseArea @map("expertise_area")
+  isPrimary     Boolean       @default(false) @map("is_primary")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, expertiseArea])
+  @@map("staff_expertise")
+}
+
+// =============================================================================
+// BRIEFS — The core domain entity
+// Every incoming legal matter is logged as a Brief before allocation.
+// =============================================================================
+
+model Brief {
+  id               String        @id @default(uuid())
+  referenceNumber  String        @map("reference_number")
+  subject          String        @db.Text
+  description      String?       @db.Text
+  submittingEntity String?       @map("submitting_entity")
+  expertiseArea    ExpertiseArea @map("expertise_area")
+  subType          BriefSubType  @default(STANDARD) @map("sub_type")
+  urgency          UrgencyLevel  @default(ROUTINE)
+  status           BriefStatus   @default(RECEIVED)
+  receivedAt       DateTime      @default(now()) @map("received_at")
+  dueDate          DateTime?     @map("due_date") @db.Date
+  estimatedHours   Decimal       @default(1.0) @map("estimated_hours") @db.Decimal(4, 1)
+  isRepeatMatter   Boolean       @default(false) @map("is_repeat_matter")
+  documentReference String?      @map("document_reference")
+
+  /// Self-relation: links this brief to the original matter when isRepeatMatter = true.
+  /// The allocation engine uses this to find the prior handling counsel.
+  parentBriefId String?   @map("parent_brief_id")
+
+  createdById String    @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  parentBrief     Brief?           @relation("RepeatMatters", fields: [parentBriefId], references: [id])
+  childBriefs     Brief[]          @relation("RepeatMatters")
+  createdBy       User             @relation("BriefCreatedBy", fields: [createdById], references: [id])
+  allocations     Allocation[]
+  allocationQueue AllocationQueue?
+  attachments     BriefAttachment[]
+  notifications   Notification[]   @relation("NotificationBrief")
+  auditBriefLogs  AuditLog[]       @relation("AuditBrief")
+
+  // Performance indexes
+  // receivedAt — daily register ORDER BY received_at ASC, range filter by date
+  // status     — daily register WHERE status = ? filter
+  // createdAt  — GET /api/briefs list orderBy createdAt DESC
+  @@index([receivedAt(sort: Desc)])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("briefs")
+}
+
+// =============================================================================
+// BRIEF ATTACHMENTS
+// Documents/resources uploaded with a brief. Stored on the local filesystem
+// under uploads/briefs/<briefId>/.
+// =============================================================================
+
+model BriefAttachment {
+  id           String   @id @default(uuid())
+  briefId      String   @map("brief_id")
+  fileName     String   @map("file_name")
+  fileType     String   @map("file_type")
+  fileSize     Int      @map("file_size")
+  storedPath   String   @map("stored_path")
+  uploadedById String   @map("uploaded_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  brief      Brief @relation(fields: [briefId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation(fields: [uploadedById], references: [id])
+
+  @@map("brief_attachments")
+}
+
+// =============================================================================
+// ALLOCATIONS
+// Links one brief to one counsel for a period of work.
+// isActive = false when superseded by a reallocation — keeps full history.
+// =============================================================================
+
+model Allocation {
+  id               String           @id @default(uuid())
+  briefId          String           @map("brief_id")
+  staffId          String           @map("staff_id")
+  allocationMethod AllocationMethod @map("allocation_method")
+  allocatedById    String?          @map("allocated_by")
+  allocatedAt      DateTime         @default(now()) @map("allocated_at")
+  hoursAllocated   Decimal          @map("hours_allocated") @db.Decimal(4, 1)
+  notes            String?          @db.Text
+  isActive         Boolean          @default(true) @map("is_active")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  brief               Brief          @relation(fields: [briefId], references: [id])
+  staff               Staff          @relation(fields: [staffId], references: [id])
+  allocatedBy         User?          @relation("AllocationCreatedBy", fields: [allocatedById], references: [id])
+  notifications       Notification[] @relation("NotificationAllocation")
+  auditAllocationLogs AuditLog[]     @relation("AuditAllocation")
+
+  // Performance indexes
+  // staffId  — used by listStaff(), getStaffProfile(), removeStaff() active-brief check
+  // briefId  — used by allocation engine repeat-matter lookup (findFirst by briefId)
+  // staffId+isActive — used by removeStaff() active allocation check
+  @@index([staffId])
+  @@index([briefId])
+  @@index([staffId, isActive])
+  @@map("allocations")
+}
+
+// =============================================================================
+// DAILY WORKLOAD SNAPSHOT
+// Pre-aggregated per-staff-per-day to avoid expensive SUM queries during
+// the allocation hot path. Updated in the same transaction as every allocation.
+// =============================================================================
+
+model DailyWorkload {
+  id             String   @id @default(uuid())
+  staffId        String   @map("staff_id")
+  workDate       DateTime @map("work_date") @db.Date
+  hoursAllocated Decimal  @default(0) @map("hours_allocated") @db.Decimal(5, 1)
+  briefCount     Int      @default(0) @map("brief_count")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  staff Staff @relation(fields: [staffId], references: [id])
+
+  @@unique([staffId, workDate])
+  @@map("daily_workload")
+}
+
+// =============================================================================
+// ALLOCATION QUEUE
+// Holds briefs that could not be allocated (all counsel at capacity).
+// DSG is alerted and must manually assign. One row per unresolved brief.
+// =============================================================================
+
+model AllocationQueue {
+  id           String    @id @default(uuid())
+  briefId      String    @unique @map("brief_id")
+  queuedAt     DateTime  @default(now()) @map("queued_at")
+  queuedReason String    @map("queued_reason") @db.Text
+  dsgAlertedAt DateTime? @map("dsg_alerted_at")
+  resolvedAt   DateTime? @map("resolved_at")
+  resolvedById String?   @map("resolved_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  brief      Brief @relation(fields: [briefId], references: [id])
+
+  // Performance indexes
+  // queuedAt  — queue listing ORDER BY queued_at ASC (oldest first)
+  // resolvedAt — WHERE resolvedAt IS NULL filter to show only open items
+  @@index([queuedAt])
+  @@index([resolvedAt])
+  @@map("allocation_queue")
+}
+
+// =============================================================================
+// NOTIFICATIONS — In-app alert system
+// Created by NotificationService inside the same transaction as the
+// triggering action (allocation, queue, reallocation).
+// =============================================================================
+
+model Notification {
+  id               String           @id @default(uuid())
+  recipientId      String           @map("recipient_id")
+  notificationType NotificationType @map("notification_type")
+  title            String
+  body             String           @db.Text
+  briefId          String?          @map("brief_id")
+  allocationId     String?          @map("allocation_id")
+  staffId          String?          @map("staff_id")
+  isRead           Boolean          @default(false) @map("is_read")
+  readAt           DateTime?        @map("read_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  recipient  User        @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  brief      Brief?      @relation("NotificationBrief", fields: [briefId], references: [id])
+  allocation Allocation? @relation("NotificationAllocation", fields: [allocationId], references: [id])
+  staff      Staff?      @relation("NotificationStaff", fields: [staffId], references: [id])
+
+  // Performance index
+  // recipientId+isRead — unread notification count and per-user notification list
+  @@index([recipientId, isRead])
+  @@map("notifications")
+}
+
+// =============================================================================
+// AUDIT LOG — Immutable, append-only record of every system action.
+// No UPDATE or DELETE is ever issued against this table.
+// The DB-level trigger (applied via a migration SQL file) enforces this.
+// payload stores a JSON snapshot of the entity state at the time of the event.
+// =============================================================================
+
+model AuditLog {
+  id           String         @id @default(uuid())
+  eventType    AuditEventType @map("event_type")
+  actorId      String?        @map("actor_id")
+  briefId      String?        @map("brief_id")
+  staffId      String?        @map("staff_id")
+  allocationId String?        @map("allocation_id")
+  payload      Json           @default("{}")
+  ipAddress    String?        @map("ip_address")
+  userAgent    String?        @map("user_agent") @db.Text
+  occurredAt   DateTime       @default(now()) @map("occurred_at")
+
+  actor      User?       @relation("AuditActor", fields: [actorId], references: [id])
+  brief      Brief?      @relation("AuditBrief", fields: [briefId], references: [id])
+  staff      Staff?      @relation("AuditStaff", fields: [staffId], references: [id])
+  allocation Allocation? @relation("AuditAllocation", fields: [allocationId], references: [id])
+
+  // Performance indexes — critical: this table is append-only and grows without bound.
+  // occurredAt — ORDER BY occurred_at DESC on audit trail + COUNT(*) range scans
+  // briefId    — filter all events for a specific brief (audit trail detail view)
+  // staffId    — filter all events touching a staff member
+  // actorId    — filter all actions performed by a specific user
+  @@index([occurredAt(sort: Desc)])
+  @@index([briefId])
+  @@index([staffId])
+  @@index([actorId])
+  @@map("audit_log")
+}

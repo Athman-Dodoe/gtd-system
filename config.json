@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {},
+  "plugin": [],
+  "model": "sk-5db8cd0a7c2c4f02bff90bb86c79f62c",
+  "username": "USER",
+  "mode": {},
+  "agent": {},
+  "snapshot": false,
+  "autoupdate": true
+}
