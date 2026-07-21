@@ -52,7 +52,7 @@ function LoginForm() {
     <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100 px-4">
       {/* Background radial glow */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(15,23,42,0.8)_0%,rgba(2,6,23,1)_100%)] pointer-events-none" />
-      
+
       <div className="relative z-10 w-full max-w-md p-8 bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl">
         <div className="flex flex-col items-center mb-8 text-center">
           {/* Logo Placeholder - elegant shield icon */}
@@ -72,7 +72,7 @@ function LoginForm() {
               />
             </svg>
           </div>
-          
+
           <h2 className="text-xs font-semibold tracking-widest text-amber-500 uppercase">
             Office of the Attorney General, Kenya
           </h2>
@@ -196,12 +196,6 @@ function LoginForm() {
             )}
           </button>
         </form>
-
-        <div className="mt-8 text-center border-t border-slate-800/60 pt-6">
-          <p className="text-[10px] text-slate-500">
-            For internal use only. All session data is monitored and audited in accordance with Kenya Government regulations.
-          </p>
-        </div>
       </div>
     </div>
   )
