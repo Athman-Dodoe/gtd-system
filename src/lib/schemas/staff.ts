@@ -11,6 +11,8 @@ export const CreateStaffSchema = z.object({
     .regex(/^[a-zA-Z\s\-']+$/, 'Full name may only contain letters, spaces, hyphens, and apostrophes'),
   email: z
     .string()
+    .trim()
+    .toLowerCase()
     .min(1, 'Email is required')
     .email('Invalid email format')
     .regex(/@ag\.go\.ke$/, 'Email must be @ag.go.ke'),
@@ -35,6 +37,8 @@ export const UpdateStaffSchema = z.object({
     .optional(),
   email: z
     .string()
+    .trim()
+    .toLowerCase()
     .min(1, 'Email is required')
     .email('Invalid email format')
     .regex(/@ag\.go\.ke$/, 'Email must be @ag.go.ke')
