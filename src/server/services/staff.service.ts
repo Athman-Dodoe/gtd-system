@@ -65,7 +65,7 @@ export interface CreateStaffInput {
   employeeNumber: string
 }
 
-const DEFAULT_PASSWORD = '***REDACTED***'
+const DEFAULT_PASSWORD = process.env.DEFAULT_STAFF_PASSWORD ?? (() => { throw new Error('DEFAULT_STAFF_PASSWORD env variable is not set') })()
 
 export async function createStaff(
   data: CreateStaffInput,
